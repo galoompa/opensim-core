@@ -16,6 +16,7 @@ if(BUILD_TESTING)
     add_subdirectory(ExampleLuxoMuscle)
     add_subdirectory(AnalysisPluginExample)
     add_subdirectory(BodyDragExample)
+	add_subdirectory(VolumetricContactExample)
     add_subdirectory(BuildDynamicWalker)
 endif()
 
