@@ -156,7 +156,7 @@ private:
     void setNull();
     void constructProperties();
 
-    double calculateMu(const double &v, const double &vt) const;
+    double findMu(const double &v, const double &vt) const;
 
     
 //=============================================================================

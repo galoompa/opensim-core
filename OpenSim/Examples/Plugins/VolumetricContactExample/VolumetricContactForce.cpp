@@ -123,20 +123,15 @@ void VolumetricContactForce::computeForce(const SimTK::State& s,
 {
     if(!_model) return;     // some minor error checking
 
-    const BodySet &bs = _model->updBodySet();         // get body set
-    const Body &eBody = bs.get(get_ellipsoid_name()); // The ellipsoid body
-    const Body &pBody = bs.get(get_plane_name()); // The plane body
-    const Ground &ground = _model->getGround(); // reference to ground
+    const BodySet& bs = _model->updBodySet();         // get body set
+    const Body& eBody = bs.get(get_ellipsoid_name()); // The ellipsoid body
+    const Body& pBody = bs.get(get_plane_name()); // The plane body
+    const Ground& ground = _model->getGround(); // reference to ground
 
-    SimTK::Rotation eR = eBody.getTransformInGround(s).R();  // eR.x()[0], etc.
-    //eBody.getVelocityInGround();
-    //eBody.getAngularVelocityInGround();
-    Vec3 ePos = eBody.getPositionInGround(s);
-
-    /* Find and name variables to match ellipsoid equations exported from Maple */
+    // Find and name variables to match ellipsoid equations exported from Maple
+    SimTK::Rotation eR = eBody.getTransformInGround(s).R();
     eR = eBody.findTransformBetween(s, pBody).R();
     Vec3 pp_e = pBody.findStationLocationInAnotherFrame(s, Vec3(0), eBody);
-
     double R1 = eR.x()[0];
     double R2 = eR.y()[0];
     double R3 = eR.z()[0];
@@ -149,7 +144,6 @@ void VolumetricContactForce::computeForce(const SimTK::State& s,
     double xp = pp_e[0];
     double yp = pp_e[1];
     double zp = pp_e[2];
-
     double a = get_ellipsoid_dims()[0];
     double b = get_ellipsoid_dims()[1];
     double c = get_ellipsoid_dims()[2];
@@ -176,15 +170,15 @@ void VolumetricContactForce::computeForce(const SimTK::State& s,
     Vec3 w_P = ground.expressVectorInAnotherFrame(s, // relative angular velocity, expressed in plane frame
         eBody.getAngularVelocityInGround(s) - pBody.getAngularVelocityInGround(s), pBody);
     
-    // Normal force (FZ)
+    // Normal force equation
     double forceZP = get_k_V() * V * (1 + get_a_V() * v_cen_P[2]);
 
-    // Rolling resistance (TX, TY)
+    // Rolling resistance equations (moment in tangential directions)
     double torqueXP = get_k_V() * get_a_V() * (Jp_xx * w_P[0] + Jp_xy * w_P[1]);
     double torqueYP = get_k_V() * get_a_V() * (Jp_xy * w_P[0] + Jp_yy * w_P[1]);
 
-    // Tangential friction (FX, FY)
-    double vt_cen_P = pow(pow(v_cen_P[0], 2) + pow(v_cen_P[1], 2), 0.5);
+    // Tangential friction equations (force in tangential directions)
+    double vt_cen_P = pow(pow(v_cen_P[0], 2) + pow(v_cen_P[1], 2), 0.5); // magnitude of relative velocity at centroid
     double forceXP, forceYP;
     if (vt_cen_P == 0) // avoid divide by 0 errors
     {
@@ -193,12 +187,12 @@ void VolumetricContactForce::computeForce(const SimTK::State& s,
     }
     else
     {
-        double mu = calculateMu(vt_cen_P, get_v_t());
+        double mu = findMu(vt_cen_P, get_v_t());
         forceXP = -abs(forceZP) * mu * v_cen_P[0] / vt_cen_P;
         forceYP = -abs(forceZP) * mu * v_cen_P[1] / vt_cen_P;
     }
     
-    // Spinning friction (TZ)
+    // Spinning friction (torque in normal direction)
     double torqueZP;
     if (V == 0) // avoid divide by 0 errors
     {
@@ -206,12 +200,11 @@ void VolumetricContactForce::computeForce(const SimTK::State& s,
     }
     else
     {
-        // TODO: this should probably not use same values for mu_s and mu_d
-        double mu = calculateMu(w_P[2], get_w_t());
+        double mu = findMu(w_P[2], get_w_t());
         torqueZP = -abs(forceZP) / V * mu * (Jp_xx + Jp_yy); // note: Jp_zz = (Jp_xx + Jp_yy)
     }
     
-    // Convert force and torque from plane to ground frame
+    // Convert force and torque from plane frame to ground frame
     Vec3 forceG = pBody.expressVectorInGround(s, Vec3(forceXP, forceYP, forceZP)); // force vector in ground frame
     Vec3 torqueG = pBody.expressVectorInGround(s, Vec3(torqueXP, torqueYP, torqueZP)); // torque vector in ground frame
     
@@ -242,7 +235,7 @@ void VolumetricContactForce::computeForce(const SimTK::State& s,
     return;
 }
 
-double VolumetricContactForce::calculateMu(const double & v, const double & vt) const
+double VolumetricContactForce::findMu(const double & v, const double & vt) const
 {
     return get_mu_d() * tanh(4 * (v / vt)) + (get_mu_s() - get_mu_d()) * (v / vt) / pow(0.25 * pow((v / vt), 2) + 0.75, 2);
 }
@@ -250,6 +243,7 @@ double VolumetricContactForce::calculateMu(const double & v, const double & vt) 
 /** Potential energy function */
 double VolumetricContactForce::computePotentialEnergy(const SimTK::State& s) const
 {
+    // TODO: implement, if necessary
     return 0;
 }
 
