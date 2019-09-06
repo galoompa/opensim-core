@@ -131,7 +131,7 @@ void BodyDragForce::computeForce(const SimTK::State& s,
         if (bodyCoMVelGround[i]<0) oppVelSign[i] = 1;
         if (bodyCoMVelGround[i]==0) oppVelSign[i] = 0;
 
-        dragForceGround[i] = oppVelSign[i] * get_coefficient() * std::pow(bodyCoMVelGround[i], get_exponent()); // calculate drag force in the GROUND coordinate system
+        dragForceGround[i] = oppVelSign[i] * get_coefficient() * pow(abs(bodyCoMVelGround[i]), get_exponent()); // calculate drag force in the GROUND coordinate system
     }
 
     // transform drag force into the BODY coordinate system
@@ -215,7 +215,7 @@ OpenSim::Array<double> BodyDragForce::getRecordValues(const SimTK::State& s) con
         if (bodyCoMVelGround[i]<0) oppVelSign[i] = 1;
         if (bodyCoMVelGround[i]==0) oppVelSign[i] = 0;
 
-        dragForceGround[i] = oppVelSign[i] * get_coefficient() * pow(bodyCoMVelGround[i], get_exponent());  // calculate drag force in the GROUND coordinate system
+        dragForceGround[i] = oppVelSign[i] * get_coefficient() * pow(abs(bodyCoMVelGround[i]), get_exponent());  // calculate drag force in the GROUND coordinate system
         values.append(dragForceGround[i]);
     }
 
