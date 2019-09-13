@@ -42,10 +42,35 @@ using namespace OpenSim;
 /**
  * Default constructor
  */
-VolumetricContactForce::VolumetricContactForce() : Force()
+VolumetricContactForce::VolumetricContactForce()
+    : Super()
+//    : TwoFrameLinker<Force, PhysicalFrame>()
 {
     setNull();
     constructProperties();
+}
+
+VolumetricContactForce::VolumetricContactForce(const std::string& name,
+    const PhysicalFrame& ellipsoidFrame, const SimTK::Transform& transformInEllipsoidFrame,
+    const PhysicalFrame& planeFrame, const SimTK::Transform& transformInPlaneFrame,
+    const double& k_V,
+    const double& a_V,
+    const double& mu_s,
+    const double& mu_d,
+    const double& v_t,
+    const double& w_t,
+    const SimTK::Vec3& ellipsoid_dims)
+    : Super(name, ellipsoidFrame, transformInEllipsoidFrame, planeFrame, transformInPlaneFrame)
+{
+    setNull();
+    constructProperties();
+    set_k_V(k_V);
+    set_a_V(a_V);
+    set_mu_s(mu_s);
+    set_mu_d(mu_d);
+    set_v_t(v_t);
+    set_w_t(w_t);
+    set_ellipsoid_dims(ellipsoid_dims);
 }
 
 
@@ -68,8 +93,6 @@ void VolumetricContactForce::setNull()
  */
 void VolumetricContactForce::constructProperties()
 {
-    constructProperty_ellipsoid_name("Unassigned");
-    constructProperty_plane_name("Unassigned");
     constructProperty_k_V(1e4);
     constructProperty_a_V(-1);
     constructProperty_ellipsoid_dims(Vec3(1));
@@ -77,14 +100,6 @@ void VolumetricContactForce::constructProperties()
     constructProperty_mu_s(0.5);
     constructProperty_v_t(1e-6);
     constructProperty_w_t(1e-6);
-
-    // Here are some examples of other constructing other scalar property types.
-    // Uncomment them as you need them.
-    // ------------------------------------------------------
-    //constructProperty_string_property("defaultString");
-    //constructProperty_int_property(10);
-    //constructProperty_bool_property(true);
-    //constructProperty_double_property(1.5);
 }
 
 //_____________________________________________________________________________
@@ -94,12 +109,15 @@ void VolumetricContactForce::constructProperties()
  *
  * @param aModel OpenSim model containing this VolumetricContactForce.
  */
+#if 0
 void VolumetricContactForce::connectToModel(Model& aModel)
 {
     string errorMessage;
 
     // Base class
     Super::connectToModel(aModel);
+
+    // TODO: probably remove below (or this whole function)
 
     // Look up the body and report an error if it is not found 
     if (!aModel.updBodySet().contains(get_ellipsoid_name())) {
@@ -111,6 +129,7 @@ void VolumetricContactForce::connectToModel(Model& aModel)
         throw (Exception(errorMessage.c_str()));
     }
 }
+#endif
 
 
 //=============================================================================
@@ -121,17 +140,15 @@ void VolumetricContactForce::computeForce(const SimTK::State& s,
                               SimTK::Vector_<SimTK::SpatialVec>& bodyForces, 
                               SimTK::Vector& generalizedForces) const
 {
-    if(!_model) return;     // some minor error checking
-
-    const BodySet& bs = _model->updBodySet();         // get body set
-    const Body& eBody = bs.get(get_ellipsoid_name()); // The ellipsoid body
-    const Body& pBody = bs.get(get_plane_name()); // The plane body
-    const Ground& ground = _model->getGround(); // reference to ground
+    // Some references to simplify equations
+    const Ground& ground = getModel().getGround(); // ground reference
+    const PhysicalFrame& eFrame = getFrame1(); // ellipsoid frame reference
+    const PhysicalFrame& pFrame = getFrame2(); // plane body reference
 
     // Find and name variables to match ellipsoid equations exported from Maple
-    SimTK::Rotation eR = eBody.getTransformInGround(s).R();
-    eR = eBody.findTransformBetween(s, pBody).R();
-    Vec3 pp_e = pBody.findStationLocationInAnotherFrame(s, Vec3(0), eBody);
+    SimTK::Rotation eR = eFrame.getTransformInGround(s).R();
+    eR = eFrame.findTransformBetween(s, pFrame).R();
+    Vec3 pp_e = pFrame.findStationLocationInAnotherFrame(s, Vec3(0), eFrame);
     double R1 = eR.x()[0];
     double R2 = eR.y()[0];
     double R3 = eR.z()[0];
@@ -160,15 +177,17 @@ void VolumetricContactForce::computeForce(const SimTK::State& s,
 
     // Centroid position and velocity (universal equations)
     Vec3 centroidPosE = Vec3(cenLx, cenLy, cenLz); // centroid expressed in ellipsoid frame
-    Vec3 centroidPos = eBody.expressVectorInGround(s, Vec3(cenLx, cenLy, cenLz)); // centroid expressed in ground frame
-    Vec3 centroidPosP = eBody.expressVectorInAnotherFrame(s, Vec3(cenLx, cenLy, cenLz), pBody); // centroid expressed in plane frame
+    //Vec3 centroidPos = eFrame.expressVectorInGround(s, Vec3(cenLx, cenLy, cenLz)); // centroid expressed in ground frame
+    Vec3 centroidPosP = eFrame.expressVectorInAnotherFrame(s, Vec3(cenLx, cenLy, cenLz), pFrame); // centroid expressed in plane frame
+
+    // NOTE: The rest of this function could be generalised for any volumetric contact.
 
     // Relative linear and angular velocity (at centroid) expressed in plane frame
-    Vec3 v_E_cen_G = eBody.findStationVelocityInGround(s, centroidPosE); // velocity of ellipsoid at centroid, expressed in ground frame
-    Vec3 v_P_cen_G = pBody.findStationVelocityInGround(s, centroidPosP); // velocity of plane at centroid, expressed in ground frame
-    Vec3 v_cen_P = ground.expressVectorInAnotherFrame(s, v_E_cen_G - v_P_cen_G, pBody); // relative velocity (of ellipsoid) at centroid, expressed in plane frame
+    Vec3 v_E_cen_G = eFrame.findStationVelocityInGround(s, centroidPosE); // velocity of ellipsoid at centroid, expressed in ground frame
+    Vec3 v_P_cen_G = pFrame.findStationVelocityInGround(s, centroidPosP); // velocity of plane at centroid, expressed in ground frame
+    Vec3 v_cen_P = ground.expressVectorInAnotherFrame(s, v_E_cen_G - v_P_cen_G, pFrame); // relative velocity (of ellipsoid) at centroid, expressed in plane frame
     Vec3 w_P = ground.expressVectorInAnotherFrame(s, // relative angular velocity, expressed in plane frame
-        eBody.getAngularVelocityInGround(s) - pBody.getAngularVelocityInGround(s), pBody);
+        eFrame.getAngularVelocityInGround(s) - pFrame.getAngularVelocityInGround(s), pFrame);
     
     // Normal force equation
     double forceZP = get_k_V() * V * (1 + get_a_V() * v_cen_P[2]);
@@ -205,16 +224,14 @@ void VolumetricContactForce::computeForce(const SimTK::State& s,
     }
     
     // Convert force and torque from plane frame to ground frame
-    Vec3 forceG = pBody.expressVectorInGround(s, Vec3(forceXP, forceYP, forceZP)); // force vector in ground frame
-    Vec3 torqueG = pBody.expressVectorInGround(s, Vec3(torqueXP, torqueYP, torqueZP)); // torque vector in ground frame
+    Vec3 forceG = pFrame.expressVectorInGround(s, Vec3(forceXP, forceYP, forceZP)); // force vector in ground frame
+    Vec3 torqueG = pFrame.expressVectorInGround(s, Vec3(torqueXP, torqueYP, torqueZP)); // torque vector in ground frame
     
-    // TODO: figure out correct convention...
-    // The previous comments (see bodyDragExample) may be completely wrong... the point should be in the body frame, and the force in the ground frame
-    applyForceToPoint(s, eBody, centroidPosE, forceG, bodyForces);
-    applyForceToPoint(s, pBody, centroidPosP, -forceG, bodyForces);
-
-    applyTorque(s, eBody, torqueG, bodyForces);
-    applyTorque(s, pBody, -torqueG, bodyForces);
+    // Apply the forces and torques to each body:
+    applyForceToPoint(s, eFrame, centroidPosE, forceG, bodyForces);
+    applyForceToPoint(s, pFrame, centroidPosP, -forceG, bodyForces);
+    applyTorque(s, eFrame, torqueG, bodyForces);
+    applyTorque(s, pFrame, -torqueG, bodyForces);
 
     // Debuging info
     // --------------

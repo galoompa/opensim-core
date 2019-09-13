@@ -145,7 +145,8 @@ void BodyDragForce::computeForce(const SimTK::State& s,
     // and the force vector itself to be in the body frame
     applyForceToPoint(s, aBody, bodyCoMPosGround, dragForceBody, bodyForces);
 
-
+    // TODO: I'm pretty sure that the above convention is the wrong way round: 
+    //   the force should be expressed in the ground frame, and the point in the body frame
 
 
     // Debuging info
