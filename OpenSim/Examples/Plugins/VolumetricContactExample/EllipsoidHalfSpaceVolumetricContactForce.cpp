@@ -1,5 +1,5 @@
 /* -------------------------------------------------------------------------- *
- *                           VolumetricContactForce.cpp                                *
+ *            EllipsoidHalfSpaceVolumetricContactForce.cpp                    *
  * -------------------------------------------------------------------------- *
  * The OpenSim API is a toolkit for musculoskeletal modeling and simulation.  *
  * See http://opensim.stanford.edu and the NOTICE file for more information.  *
@@ -8,7 +8,7 @@
  * through the Warrior Web program.                                           *
  *                                                                            *
  * Copyright (c) 2005-2017 Stanford University and the Authors                *
- * Author(s):                                                                 *
+ * Author(s): Peter Brown                                                     *
  *                                                                            *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may    *
  * not use this file except in compliance with the License. You may obtain a  *
@@ -24,9 +24,8 @@
 //=============================================================================
 // INCLUDES
 //=============================================================================
-#include <OpenSim/Simulation/Model/BodySet.h>
 #include <OpenSim/Simulation/Model/Model.h>
-#include "VolumetricContactForce.h"
+#include "EllipsoidHalfSpaceVolumetricContactForce.h"
 
 //=============================================================================
 // STATICS
@@ -42,35 +41,49 @@ using namespace OpenSim;
 /**
  * Default constructor
  */
-VolumetricContactForce::VolumetricContactForce()
+EllipsoidHalfSpaceVolumetricContactForce::EllipsoidHalfSpaceVolumetricContactForce()
     : Super()
-//    : TwoFrameLinker<Force, PhysicalFrame>()
 {
     setNull();
     constructProperties();
 }
 
-VolumetricContactForce::VolumetricContactForce(const std::string& name,
+EllipsoidHalfSpaceVolumetricContactForce::EllipsoidHalfSpaceVolumetricContactForce(const std::string& name,
     const PhysicalFrame& ellipsoidFrame, const SimTK::Transform& transformInEllipsoidFrame,
-    const PhysicalFrame& planeFrame, const SimTK::Transform& transformInPlaneFrame,
-    const double& k_V,
-    const double& a_V,
-    const double& mu_s,
-    const double& mu_d,
-    const double& v_t,
-    const double& w_t,
-    const SimTK::Vec3& ellipsoid_dims)
-    : Super(name, ellipsoidFrame, transformInEllipsoidFrame, planeFrame, transformInPlaneFrame)
+    const PhysicalFrame& halfSpaceFrame, const SimTK::Transform& transformInHalfSpaceFrame,
+    const double& volumetricStiffness,
+    const double& volumetricDamping,
+    const double& staticFrictionCoefficient,
+    const double& dynamicFrictionCoefficient,
+    const double& frictionTransitionVelocity,
+    const double& frictionTransitionAngularVelocity,
+    const SimTK::Vec3& ellipsoidDimensions)
+    : Super()
 {
     setNull();
     constructProperties();
-    set_k_V(k_V);
-    set_a_V(a_V);
-    set_mu_s(mu_s);
-    set_mu_d(mu_d);
-    set_v_t(v_t);
-    set_w_t(w_t);
-    set_ellipsoid_dims(ellipsoid_dims);
+
+    set_volumetricStiffness(volumetricStiffness);
+    set_volumetricDamping(volumetricDamping);
+    set_staticFrictionCoefficient(staticFrictionCoefficient);
+    set_dynamicFrictionCoefficient(dynamicFrictionCoefficient);
+    set_frictionTransitionVelocity(frictionTransitionVelocity);
+    set_frictionTransitionAngularVelocity(frictionTransitionAngularVelocity);
+    set_ellipsoidDimensions(ellipsoidDimensions);
+
+    PhysicalOffsetFrame ellipsoidoffset = PhysicalOffsetFrame(ellipsoidFrame.getName() + "_offset", ellipsoidFrame, transformInEllipsoidFrame);
+    PhysicalOffsetFrame halfspaceoffset = PhysicalOffsetFrame(halfSpaceFrame.getName() + "_offset", halfSpaceFrame, transformInHalfSpaceFrame);
+    
+    int e_id = append_frames(ellipsoidoffset);
+    int hs_id = append_frames(halfspaceoffset);
+
+    connectSocket_ellipsoidFrame(get_frames(e_id));
+    connectSocket_halfspaceFrame(get_frames(hs_id));
+
+    // The following is necessary... for some reason
+    finalizeFromProperties();
+    static_cast<PhysicalOffsetFrame&>(upd_frames(e_id)).setParentFrame(ellipsoidFrame);
+    static_cast<PhysicalOffsetFrame&>(upd_frames(hs_id)).setParentFrame(halfSpaceFrame);
 }
 
 
@@ -80,9 +93,9 @@ VolumetricContactForce::VolumetricContactForce(const std::string& name,
 //=============================================================================
 //_____________________________________________________________________________
 /**
- * Set the data members of this VolumetricContactForce to their null values.
+ * Set the data members of this EllipsoidHalfSpaceVolumetricContactForce to their null values.
  */
-void VolumetricContactForce::setNull()
+void EllipsoidHalfSpaceVolumetricContactForce::setNull()
 {
     // no internal data members to initialize.
 }
@@ -91,63 +104,36 @@ void VolumetricContactForce::setNull()
 /**
  * Connect properties to local pointers.
  */
-void VolumetricContactForce::constructProperties()
+void EllipsoidHalfSpaceVolumetricContactForce::constructProperties()
 {
-    constructProperty_k_V(1e4);
-    constructProperty_a_V(-1);
-    constructProperty_ellipsoid_dims(Vec3(1));
-    constructProperty_mu_d(0.5);
-    constructProperty_mu_s(0.5);
-    constructProperty_v_t(1e-6);
-    constructProperty_w_t(1e-6);
+    // TODO: should these default parameters even be set? Give some documentation?
+    constructProperty_frames();
+    constructProperty_volumetricStiffness(1e4);
+    constructProperty_volumetricDamping(-1);
+    constructProperty_ellipsoidDimensions(Vec3(1));
+    constructProperty_dynamicFrictionCoefficient(0.5);
+    constructProperty_staticFrictionCoefficient(0.5);
+    constructProperty_frictionTransitionVelocity(1e-6);
+    constructProperty_frictionTransitionAngularVelocity(1e-6);
 }
-
-//_____________________________________________________________________________
-/**
- * Perform some set up functions that happen after the
- * object has been deserialized or copied.
- *
- * @param aModel OpenSim model containing this VolumetricContactForce.
- */
-#if 0
-void VolumetricContactForce::connectToModel(Model& aModel)
-{
-    string errorMessage;
-
-    // Base class
-    Super::connectToModel(aModel);
-
-    // TODO: probably remove below (or this whole function)
-
-    // Look up the body and report an error if it is not found 
-    if (!aModel.updBodySet().contains(get_ellipsoid_name())) {
-        errorMessage = "Invalid bodyName (" + get_ellipsoid_name() + ") specified in Force " + getName();
-        throw (Exception(errorMessage.c_str()));
-    }
-    if (!aModel.updBodySet().contains(get_plane_name())) {
-        errorMessage = "Invalid bodyName (" + get_plane_name() + ") specified in Force " + getName();
-        throw (Exception(errorMessage.c_str()));
-    }
-}
-#endif
 
 
 //=============================================================================
 // COMPUTATION
 //=============================================================================
 
-void VolumetricContactForce::computeForce(const SimTK::State& s, 
+void EllipsoidHalfSpaceVolumetricContactForce::computeForce(const SimTK::State& s, 
                               SimTK::Vector_<SimTK::SpatialVec>& bodyForces, 
                               SimTK::Vector& generalizedForces) const
 {
     // Some references to simplify equations
     const Ground& ground = getModel().getGround(); // ground reference
-    const PhysicalFrame& eFrame = getFrame1(); // ellipsoid frame reference
-    const PhysicalFrame& pFrame = getFrame2(); // plane body reference
+    const PhysicalFrame& eFrame = getSocket<PhysicalFrame>("ellipsoidFrame").getConnectee(); // ellipsoid frame reference
+    const PhysicalFrame& pFrame = getSocket<PhysicalFrame>("halfspaceFrame").getConnectee(); // plane body reference
+    
 
     // Find and name variables to match ellipsoid equations exported from Maple
-    SimTK::Rotation eR = eFrame.getTransformInGround(s).R();
-    eR = eFrame.findTransformBetween(s, pFrame).R();
+    SimTK::Rotation eR = eFrame.findTransformBetween(s, pFrame).R();
     Vec3 pp_e = pFrame.findStationLocationInAnotherFrame(s, Vec3(0), eFrame);
     double R1 = eR.x()[0];
     double R2 = eR.y()[0];
@@ -161,9 +147,9 @@ void VolumetricContactForce::computeForce(const SimTK::State& s,
     double xp = pp_e[0];
     double yp = pp_e[1];
     double zp = pp_e[2];
-    double a = get_ellipsoid_dims()[0];
-    double b = get_ellipsoid_dims()[1];
-    double c = get_ellipsoid_dims()[2];
+    double a = get_ellipsoidDimensions()[0];
+    double b = get_ellipsoidDimensions()[1];
+    double c = get_ellipsoidDimensions()[2];
 
     // Volumetric equations for ellipsoids (derived and optimised in Maple)
     double V = (0.0e0 < -0.1e1 + (R7 * xp + R8 * yp + R9 * zp) * pow(a * a * R7 * R7 + b * b * R8 * R8 + c * c * R9 * R9, -0.1e1 / 0.2e1) ? 0.4e1 / 0.3e1 * 0.3141592654e1 * a * b * c : (0.0e0 <= 0.1e1 + (R7 * xp + R8 * yp + R9 * zp) * pow(a * a * R7 * R7 + b * b * R8 * R8 + c * c * R9 * R9, -0.1e1 / 0.2e1) ? -0.3141592654e1 * pow(0.1e1 + (R7 * xp + R8 * yp + R9 * zp) * pow(a * a * R7 * R7 + b * b * R8 * R8 + c * c * R9 * R9, -0.1e1 / 0.2e1), 0.2e1) * (-0.2e1 + (R7 * xp + R8 * yp + R9 * zp) * pow(a * a * R7 * R7 + b * b * R8 * R8 + c * c * R9 * R9, -0.1e1 / 0.2e1)) * a * b * c / 0.3e1 : 0));
@@ -190,11 +176,11 @@ void VolumetricContactForce::computeForce(const SimTK::State& s,
         eFrame.getAngularVelocityInGround(s) - pFrame.getAngularVelocityInGround(s), pFrame);
     
     // Normal force equation
-    double forceZP = get_k_V() * V * (1 + get_a_V() * v_cen_P[2]);
+    double forceZP = get_volumetricStiffness() * V * (1 + get_volumetricDamping() * v_cen_P[2]);
 
     // Rolling resistance equations (moment in tangential directions)
-    double torqueXP = get_k_V() * get_a_V() * (Jp_xx * w_P[0] + Jp_xy * w_P[1]);
-    double torqueYP = get_k_V() * get_a_V() * (Jp_xy * w_P[0] + Jp_yy * w_P[1]);
+    double torqueXP = get_volumetricStiffness() * get_volumetricDamping() * (Jp_xx * w_P[0] + Jp_xy * w_P[1]);
+    double torqueYP = get_volumetricStiffness() * get_volumetricDamping() * (Jp_xy * w_P[0] + Jp_yy * w_P[1]);
 
     // Tangential friction equations (force in tangential directions)
     double vt_cen_P = pow(pow(v_cen_P[0], 2) + pow(v_cen_P[1], 2), 0.5); // magnitude of relative velocity at centroid
@@ -206,7 +192,7 @@ void VolumetricContactForce::computeForce(const SimTK::State& s,
     }
     else
     {
-        double mu = findMu(vt_cen_P, get_v_t());
+        double mu = findMu(vt_cen_P, get_frictionTransitionVelocity());
         forceXP = -abs(forceZP) * mu * v_cen_P[0] / vt_cen_P;
         forceYP = -abs(forceZP) * mu * v_cen_P[1] / vt_cen_P;
     }
@@ -219,7 +205,7 @@ void VolumetricContactForce::computeForce(const SimTK::State& s,
     }
     else
     {
-        double mu = findMu(w_P[2], get_w_t());
+        double mu = findMu(w_P[2], get_frictionTransitionAngularVelocity());
         torqueZP = -abs(forceZP) / V * mu * (Jp_xx + Jp_yy); // note: Jp_zz = (Jp_xx + Jp_yy)
     }
     
@@ -233,35 +219,12 @@ void VolumetricContactForce::computeForce(const SimTK::State& s,
     applyTorque(s, eFrame, torqueG, bodyForces);
     applyTorque(s, pFrame, -torqueG, bodyForces);
 
-    // Debuging info
-    // --------------
-    int deb = 0;
-    if (deb)
-    {
-        cout << "Time = " << s.getTime() << endl;
-        printf("cenL %f %f %f\n", cenLx, cenLy, cenLz);
-        printf("F %f %f %f\n", forceXP, forceYP, forceZP);
-        printf("T %f %f %f\n", torqueXP, torqueYP, torqueZP);
-        /*for (int i = 0; i < 3; ++i)
-        {
-            cout << eR.x()[i] << "\t" << eR.y()[i] << "\t" << eR.z()[i] << endl;
-        }*/
-        auto res = system("pause");
-    }
-
     return;
 }
 
-double VolumetricContactForce::findMu(const double & v, const double & vt) const
+double EllipsoidHalfSpaceVolumetricContactForce::findMu(const double & v, const double & vt) const
 {
-    return get_mu_d() * tanh(4 * (v / vt)) + (get_mu_s() - get_mu_d()) * (v / vt) / pow(0.25 * pow((v / vt), 2) + 0.75, 2);
-}
-
-/** Potential energy function */
-double VolumetricContactForce::computePotentialEnergy(const SimTK::State& s) const
-{
-    // TODO: implement, if necessary
-    return 0;
+    return get_dynamicFrictionCoefficient() * tanh(4 * (v / vt)) + (get_staticFrictionCoefficient() - get_dynamicFrictionCoefficient()) * (v / vt) / pow(0.25 * pow((v / vt), 2) + 0.75, 2);
 }
 
 
@@ -272,7 +235,7 @@ double VolumetricContactForce::computePotentialEnergy(const SimTK::State& s) con
  * Provide names of the quantities (column labels) of the force value(s) reported
  * 
  */
-OpenSim::Array<std::string> VolumetricContactForce::getRecordLabels() const 
+OpenSim::Array<std::string> EllipsoidHalfSpaceVolumetricContactForce::getRecordLabels() const 
 {
     OpenSim::Array<std::string> labels("");
     //labels.append(getName()+"."+get_body_name()+".force.X");
@@ -281,7 +244,7 @@ OpenSim::Array<std::string> VolumetricContactForce::getRecordLabels() const
 /**
  * Provide the value(s) to be reported that correspond to the labels
  */
-OpenSim::Array<double> VolumetricContactForce::getRecordValues(const SimTK::State& s) const 
+OpenSim::Array<double> EllipsoidHalfSpaceVolumetricContactForce::getRecordValues(const SimTK::State& s) const 
 {
     OpenSim::Array<double> values(3);
     // need to assign values...
