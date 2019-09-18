@@ -26,10 +26,9 @@
 //=============================================================================
 // INCLUDES
 //=============================================================================
-#include <string>
-#include "osimPluginDLL.h" // TODO: remove this
-#include <OpenSim/Simulation/Model/Force.h>
-#include <OpenSim/Simulation/Model/PhysicalFrame.h>
+#include "OpenSim/Simulation/osimSimulationDLL.h"
+#include "OpenSim/Simulation/Model/Force.h"
+#include "OpenSim/Simulation/Model/PhysicalFrame.h"
 
 // TODO: fill in. For example of comments, see https://simtk.org/api_docs/opensim/api_docs/classOpenSim_1_1Joint.html#details
 // for an example with decent documentation
@@ -59,7 +58,7 @@ PinJoint* myPin = new PinJoint("pendulumToGround", myModel.getGround(),
 */
 namespace OpenSim {
     // TODO: OSIMPLUGIN_API will change to OSEMSIMULATION_API
-class OSIMPLUGIN_API EllipsoidHalfSpaceVolumetricContactForce 
+class OSIMSIMULATION_API EllipsoidHalfSpaceVolumetricContactForce 
     : public Force
 {
     OpenSim_DECLARE_CONCRETE_OBJECT(EllipsoidHalfSpaceVolumetricContactForce, Force);
