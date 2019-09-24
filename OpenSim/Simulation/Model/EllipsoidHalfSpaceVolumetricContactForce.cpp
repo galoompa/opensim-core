@@ -117,6 +117,31 @@ void EllipsoidHalfSpaceVolumetricContactForce::constructProperties()
     constructProperty_frictionTransitionAngularVelocity(1e-6);
 }
 
+void EllipsoidHalfSpaceVolumetricContactForce::generateDecorations(bool fixed, const ModelDisplayHints& hints,
+    const SimTK::State& s, SimTK::Array_<SimTK::DecorativeGeometry>& geometry) const
+{
+    Super::generateDecorations(fixed, hints, s, geometry);
+
+    // There is no fixed geometry to generate here.
+    if (fixed) { return; }
+
+    if (!hints.get_show_contact_geometry())  return;
+
+    const PhysicalFrame& eFrame = getSocket<PhysicalFrame>("ellipsoidFrame").getConnectee(); // ellipsoid frame reference
+
+    const auto eTransform = eFrame.findTransformInBaseFrame(); // what is the difference between baseframe and ground?
+
+    // TODO: have some of these customisable?
+    //    if this were insteam part of a "ContactEllipsoid" object, get_Appearance() would be inherited
+    geometry.push_back(SimTK::DecorativeEllipsoid(get_ellipsoidDimensions())
+        .setTransform(eTransform)
+        //.setRepresentation(get_Appearance().get_representation())
+        .setBodyId(eFrame.getMobilizedBodyIndex())
+        .setColor(SimTK::Gray)
+        //.setOpacity(get_Appearance().get_opacity())
+    );
+}
+
 
 //=============================================================================
 // COMPUTATION

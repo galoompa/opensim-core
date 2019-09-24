@@ -41,7 +41,7 @@ penetration (and some other geometry) between two surfaces, which can result
 in single set of equations describing the contact forces between two surfaces,
 without needing to discretise the surfaces.
 
-TODO: fill in
+....
 stomJoint). For more
 details on how the underlying formulation supports coupled curvilinear
 joints, see "Minimal formulation of joint motion for biomechanisms", 2010
@@ -57,7 +57,6 @@ PinJoint* myPin = new PinJoint("pendulumToGround", myModel.getGround(),
 @author Peter Brown
 */
 namespace OpenSim {
-    // TODO: OSIMPLUGIN_API will change to OSEMSIMULATION_API
 class OSIMSIMULATION_API EllipsoidHalfSpaceVolumetricContactForce 
     : public Force
 {
@@ -119,7 +118,7 @@ public:
                       SimTK::Vector_<SimTK::SpatialVec>& bodyForces, 
                       SimTK::Vector& generalizedForces) const override;
 
-    // TODO: consider implementing denerateDecorations (eg. see contactSphere)
+    // TODO: consider implementing generateDecorations (eg. see contactSphere)
 
     // TODO: consider using ContactHalfSpace and make a ContactEllipsoid
 
@@ -135,6 +134,8 @@ public:
     */
     OpenSim::Array<double> getRecordValues(const SimTK::State& state) const override;
 
+    void generateDecorations(bool fixed, const ModelDisplayHints& hints,
+        const SimTK::State& s, SimTK::Array_<SimTK::DecorativeGeometry>& geometry) const;
 
 private:
     void setNull();
