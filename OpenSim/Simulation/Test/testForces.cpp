@@ -41,6 +41,7 @@
 #include <OpenSim/Simulation/osimSimulation.h>
 #include <OpenSim/Analyses/osimAnalyses.h>
 #include <OpenSim/Auxiliary/auxiliaryTestFunctions.h>
+#include <OpenSim/Simulation/Model/EllipsoidHalfSpaceVolumetricContactForce.h>
 #include "SimTKcommon/internal/Xml.h"
 
 using namespace OpenSim;
@@ -68,6 +69,9 @@ void testExpressionBasedPointToPointForce();
 void testExpressionBasedCoordinateForce();
 void testSerializeDeserialize();
 void testTranslationalDampingEffect(Model& osimModel, Coordinate& sliderCoord, double start_h, Component& componentWithDamping);
+void testVolumetricContact();
+void testVolumetricContactAngle();
+void testVolumetricContactDissipation();
 
 int main()
 {
@@ -154,6 +158,12 @@ int main()
     catch (const std::exception& e){
         cout << e.what() <<endl; 
         failures.push_back("testSerializeDeserialize");
+    }
+
+    try { testVolumetricContact(); }
+    catch (const std::exception& e) {
+        cout << e.what() << endl;
+        failures.push_back("testVolumetricContact");
     }
 
     if (!failures.empty()) {
@@ -1840,5 +1850,145 @@ void testTranslationalDampingEffect(Model& osimModel, Coordinate& sliderCoord, d
         ASSERT(newEnergy < lastEnergy);
         lastEnergy = newEnergy;
     }
+
+}
+
+void testVolumetricContact() {
+    testVolumetricContactAngle();
+    testVolumetricContactDissipation();
+}
+
+void testVolumetricContactAngle() {
+    using namespace SimTK;
+    Model model;
+    model.setName("ellipsoid_angle_test");
+    model.setUseVisualizer(false);
+
+    OpenSim::Body* ellipsoid = new OpenSim::Body("ellipsoid", 0.1, Vec3(0), Inertia(0.1));
+    model.addBody(ellipsoid);
+
+    auto slider = new OpenSim::Body("slider", 0.01, Vec3(0), Inertia(0.1));
+    model.addBody(slider);
+
+    auto sliderjoint = new OpenSim::SliderJoint("slider_joint", model.getGround(), Vec3(0), Vec3(0, 0, Pi / 2), *slider, Vec3(0), Vec3(0, 0, Pi / 2));
+    model.addJoint(sliderjoint);
+
+    PinJoint *pinjoint = new PinJoint("ellipsoid_pin_joint", *slider, Vec3(0), Vec3(0), *ellipsoid, Vec3(0), Vec3(0));
+    model.addJoint(pinjoint);
+
+    double a = 1;
+    double b = 0.3;
+    double c = 2.0;
+
+    EllipsoidHalfSpaceVolumetricContactForce *eContact2 = new EllipsoidHalfSpaceVolumetricContactForce("ellipsoid_plane_contact",
+        *ellipsoid, Transform(),
+        model.getGround(), Transform(Rotation(-Pi / 2, CoordinateAxis::XCoordinateAxis())), // transformed Z-axis should point up (plane normal)
+        1e4, // volumetric stiffness
+        -1, // volumetric damping
+        0.0, // static friction
+        0.0, // dynamic friction
+        1e-4, // friction transition velocity
+        1e-4, // friction transition angular velocity
+        Vec3(a, b, c)); // ellipsoid dimensions
+    model.addForce(eContact2);
+
+    double stepsize = 10;
+
+    double times[] = { 0, stepsize * 1 };
+    double angles[] = { -Pi / 2, Pi / 2 };
+
+    auto pinjointfunction = new PiecewiseLinearFunction(2, times, angles);
+    pinjoint->updCoordinate().set_prescribed_function(*pinjointfunction);
+    pinjoint->updCoordinate().set_prescribed(true);
+
+    State& state = model.initSystem();
+
+    sliderjoint->getCoordinate().setValue(state, a + 0.1, false);
+    model.getMultibodySystem().realize(state, Stage::Position);
+
+    Manager manager(model);
+    manager.setIntegratorAccuracy(integ_accuracy);
+    state.setTime(0.0);
+    manager.initialize(state);
+
+    double final_t = 10;
+    double nsteps = 10;
+    double dt = final_t / nsteps;
+
+
+    for (int i = 5; i <= nsteps; i++) {
+        state = manager.integrate(dt*i);
+        model.getMultibodySystem().realize(state, Stage::Acceleration);
+        double height_sim = sliderjoint->getCoordinate().getValue(state);
+
+        // Theoretical height (for infinite stiffness)
+        double angle = (dt*i / 20 - 0.25) * 2 * Pi;
+        double height = sqrt(pow(a * sin(angle), 2) + pow(b * cos(angle), 2));
+        cout << i << " " << height << " " << height_sim << endl;
+
+        // Expect up to 0.01m penetration
+        ASSERT(height_sim < height && height_sim > height - 0.01);
+    }
+}
+
+void testVolumetricContactDissipation() {
+    using namespace SimTK;
+    Model model;
+    model.setName("ellipsoid_contact_test");
+    model.setUseVisualizer(false);
+
+    double a, b, c;
+    a = 1;
+    b = .5;
+    c = .75;
+
+    OpenSim::Body* ellipsoid = new OpenSim::Body("ellipsoid", 1, Vec3(0), Inertia(0.1));
+    model.addBody(ellipsoid);
+
+    FreeJoint *ellipsoidJoint = new FreeJoint("ellipsoid_ground_free_joint",
+        model.getGround(), Vec3(0), Vec3(0),
+        *ellipsoid, Vec3(0), Vec3(0));
+    model.addJoint(ellipsoidJoint);
+
+    EllipsoidHalfSpaceVolumetricContactForce *eContact2 = new EllipsoidHalfSpaceVolumetricContactForce("ellipsoid_plane_contact",
+        *ellipsoid, Transform(),
+        model.getGround(), Transform(Rotation(-Pi / 2, CoordinateAxis::XCoordinateAxis())), // transformed Z-axis should point up (plane normal)
+        1e3, // volumetric stiffness
+        -10, // volumetric damping
+        0.51, // static friction
+        0.5, // dynamic friction
+        1e-4, // friction transition velocity
+        1e-4, // friction transition angular velocity
+        Vec3(a, b, c)); // ellipsoid dimensions
+    model.addForce(eContact2);
+
+    // Configure the model.
+    State& state = model.initSystem();
+
+    ellipsoidJoint->getCoordinate(FreeJoint::Coord::TranslationY).setValue(state, b + 0.5);
+    ellipsoidJoint->getCoordinate(FreeJoint::Coord::Rotation3Z).setValue(state, Pi / 8);
+    ellipsoidJoint->getCoordinate(FreeJoint::Coord::Rotation1X).setValue(state, Pi / 8);
+
+    ellipsoidJoint->getCoordinate(FreeJoint::Coord::Rotation1X).setSpeedValue(state, 2 * Pi * 1);
+    ellipsoidJoint->getCoordinate(FreeJoint::Coord::TranslationZ).setSpeedValue(state, -2);
+
+    Manager manager(model);
+    manager.setIntegratorAccuracy(1e-3);
+    state.setTime(0.0);
+    manager.initialize(state);
+
+    double final_t = 5;
+
+    FreeJoint::Coord coords[] = { FreeJoint::Coord::Rotation1X, FreeJoint::Coord::Rotation2Y, FreeJoint::Coord::Rotation3Z,
+        FreeJoint::Coord::TranslationX , FreeJoint::Coord::TranslationY, FreeJoint::Coord::TranslationZ };
+
+    state = manager.integrate(final_t);
+    model.getMultibodySystem().realize(state, Stage::Acceleration);
+
+    for (FreeJoint::Coord coord : coords) {
+        cout << ellipsoidJoint->getCoordinate(coord).getSpeedValue(state) << " ";
+        ASSERT_EQUAL(0.0, ellipsoidJoint->getCoordinate(coord).getSpeedValue(state), 1e-2);
+    }
+    cout << endl;
 
 }

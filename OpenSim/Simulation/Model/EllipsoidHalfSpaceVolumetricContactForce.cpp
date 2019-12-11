@@ -97,7 +97,7 @@ EllipsoidHalfSpaceVolumetricContactForce::EllipsoidHalfSpaceVolumetricContactFor
  */
 void EllipsoidHalfSpaceVolumetricContactForce::setNull()
 {
-    // no internal data members to initialize.
+    setAuthors("Peter Brown");
 }
 
 //_____________________________________________________________________________
@@ -130,9 +130,8 @@ void EllipsoidHalfSpaceVolumetricContactForce::generateDecorations(bool fixed, c
     const PhysicalFrame& eFrame = getSocket<PhysicalFrame>("ellipsoidFrame").getConnectee(); // ellipsoid frame reference
 
     const auto eTransform = eFrame.findTransformInBaseFrame(); // what is the difference between baseframe and ground?
-
     // TODO: have some of these customisable?
-    //    if this were insteam part of a "ContactEllipsoid" object, get_Appearance() would be inherited
+    //    if this were instead part of a "ContactEllipsoid" object, get_Appearance() would be inherited
     geometry.push_back(SimTK::DecorativeEllipsoid(get_ellipsoidDimensions())
         .setTransform(eTransform)
         //.setRepresentation(get_Appearance().get_representation())
