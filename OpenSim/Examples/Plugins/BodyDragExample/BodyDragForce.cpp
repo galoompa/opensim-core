@@ -131,7 +131,7 @@ void BodyDragForce::computeForce(const SimTK::State& s,
         if (bodyCoMVelGround[i]<0) oppVelSign[i] = 1;
         if (bodyCoMVelGround[i]==0) oppVelSign[i] = 0;
 
-        dragForceGround[i] = oppVelSign[i] * get_coefficient() * std::pow(bodyCoMVelGround[i], get_exponent()); // calculate drag force in the GROUND coordinate system
+        dragForceGround[i] = oppVelSign[i] * get_coefficient() * pow(abs(bodyCoMVelGround[i]), get_exponent()); // calculate drag force in the GROUND coordinate system
     }
 
     // transform drag force into the BODY coordinate system
@@ -145,7 +145,8 @@ void BodyDragForce::computeForce(const SimTK::State& s,
     // and the force vector itself to be in the body frame
     applyForceToPoint(s, aBody, bodyCoMPosGround, dragForceBody, bodyForces);
 
-
+    // TODO: I'm pretty sure that the above convention is the wrong way round: 
+    //   the force should be expressed in the ground frame, and the point in the body frame
 
 
     // Debuging info
@@ -215,7 +216,7 @@ OpenSim::Array<double> BodyDragForce::getRecordValues(const SimTK::State& s) con
         if (bodyCoMVelGround[i]<0) oppVelSign[i] = 1;
         if (bodyCoMVelGround[i]==0) oppVelSign[i] = 0;
 
-        dragForceGround[i] = oppVelSign[i] * get_coefficient() * pow(bodyCoMVelGround[i], get_exponent());  // calculate drag force in the GROUND coordinate system
+        dragForceGround[i] = oppVelSign[i] * get_coefficient() * pow(abs(bodyCoMVelGround[i]), get_exponent());  // calculate drag force in the GROUND coordinate system
         values.append(dragForceGround[i]);
     }
 

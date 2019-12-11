@@ -44,6 +44,7 @@
 #include "Model/ContactHalfSpace.h"
 #include "Model/ContactMesh.h"
 #include "Model/ContactSphere.h"
+#include "Model/ContactEllipsoid.h"
 #include "Model/CoordinateLimitForce.h"
 #include "Model/CoordinateSet.h"
 #include "Model/ElasticFoundationForce.h"
@@ -79,6 +80,7 @@
 #include "Model/Geometry.h"
 #include "Model/ModelVisualPreferences.h"
 #include "Model/ExpressionBasedCoordinateForce.h"
+#include "Model/EllipsoidHalfSpaceVolumetricContactForce.h"
 
 #include "Control/ControlSet.h"
 #include "Control/ControlSetController.h"
@@ -232,6 +234,7 @@ OSIMSIMULATION_API void RegisterTypes_osimSimulation()
     Object::registerType( HuntCrossleyForce::ContactParametersSet() );
     Object::registerType( ElasticFoundationForce::ContactParameters() );
     Object::registerType( ElasticFoundationForce::ContactParametersSet() );
+    Object::registerType( EllipsoidHalfSpaceVolumetricContactForce() );
 
     Object::registerType( Ligament() );
     Object::registerType( PrescribedForce() );
